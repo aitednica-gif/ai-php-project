@@ -39,38 +39,49 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          # Crear request JSON
-          cat > request.json << 'REQUEST_EOF'
-          {
-            "model": "llama3-70b-8192",
-            "messages": [
-              {
-                "role": "system",
-                "content": "Eres un code reviewer PHP senior. Analiza código con rigor técnico."
-              },
-              {
-                "role": "user",
-                "content": "Analiza este código PHP y proporciona review conciso con problemas, sugerencias y veredicto final."
-              }
-            ],
-            "temperature": 0.3,
-            "max_tokens": 1500
-          }
-          REQUEST_EOF
+          # Leer el diff
+          DIFF_CONTENT=$(cat pr_diff.txt)
           
-          # Llamar a Groq
+          # Guardar el diff en una variable de entorno separada para evitar problemas
+          echo "diff_length=$(echo "$DIFF_CONTENT" | wc -c)" >> $GITHUB_OUTPUT
+          
+          # Crear JSON con el prompt
+          # El prompt incluirá el diff directamente
+          PROMPT_TEXT="Analiza este código PHP:\n\n$DIFF_CONTENT\n\nProporciona:\n1. Problemas principales\n2. Sugerencias\n3. Veredicto"
+          
+          # Crear JSON usando jq
+          echo '{"model":"llama3-70b-8192","messages":[{"role":"system","content":"Eres un code reviewer PHP senior"},{"role":"user","content":"placeholder"}],"temperature":0.3,"max_tokens":1500}' > template.json
+          
+          # Reemplazar el placeholder con el prompt real
+          jq --arg prompt "$PROMPT_TEXT" '.messages[1].content = $prompt' template.json > request.json
+          
+          # Debug
+          echo "Request JSON creado"
+          
+          # Llamar a Groq API
           curl -s https://api.groq.com/openai/v1/chat/completions \
             -H "Authorization: Bearer $GROQ_API_KEY" \
             -H "Content-Type: application/json" \
             -d @request.json > response.json
           
-          # Extraer y guardar respuesta
-          ANALYSIS=$(jq -r '.choices[0].message.content // "Error: No se pudo obtener respuesta"' response.json)
+          # Extraer respuesta
+          if command -v jq &> /dev/null; then
+            ANALYSIS=$(jq -r '.choices[0].message.content // "Error: No hay respuesta"' response.json 2>/dev/null)
+          else
+            ANALYSIS="Error: jq no disponible"
+          fi
           
-          # Usar delimitador único
-          echo "analysis<<GHASECRET" >> $GITHUB_OUTPUT
-          echo "$ANALYSIS" >> $GITHUB_OUTPUT
-          echo "GHASECRET" >> $GITHUB_OUTPUT
+          # Si el análisis está vacío, usar mensaje de error
+          if [ -z "$ANALYSIS" ] || [ "$ANALYSIS" = "null" ]; then
+            ANALYSIS="No se pudo obtener análisis del código"
+          fi
+          
+          # Guardar en output usando delimitador único
+          {
+            echo "analysis<<GHA_EOF"
+            echo "$ANALYSIS"
+            echo "GHA_EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Comentar en PR
         if: steps.diff.outputs.skip == 'false'
@@ -85,5 +96,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🤖 **AI Code Review (Groq/Llama 3)**\n\n${analysis}\n\n---\n*Generado automáticamente*`
+              body: '🤖 **AI Code Review (Groq/Llama 3)**\n\n' + analysis + '\n\n---\n*Generado automáticamente* 🚀'
             });
