@@ -44,10 +44,10 @@ jobs:
           echo "Diff length: $(echo "$DIFF_CONTENT" | wc -c) characters"
 
           # Crear el prompt
-          PROMPT_TEXT="Analiza este código PHP:\n\n$DIFF_CONTENT\n\nProporciona:\n1. Problemas principales\n2. Sugerencias\n3. Veredicto"
+          PROMPT_TEXT="Analyze this PHP code:\n\n$DIFF_CONTENT\n\nProvide:\n1. Main issues\n2. Suggestions\n3. Verdict"
 
           # Crear JSON usando jq
-          jq -n --arg prompt "$PROMPT_TEXT" '{model: "moonshotai/kimi-k2-instruct-0905", messages: [{role: "system", content: "Eres un code reviewer PHP senior"}, {role: "user", content: $prompt}], temperature: 0.3, max_tokens: 1500}' > request.json
+          jq -n --arg prompt "$PROMPT_TEXT" '{model: "moonshotai/kimi-k2-instruct-0905", messages: [{role: "system", content: "You are a senior PHP code reviewer. Provide detailed code reviews in English."}, {role: "user", content: $prompt}], temperature: 0.3, max_tokens: 1500}' > request.json
 
           echo "Request JSON creado (primeras 500 chars):"
           head -c 500 request.json
