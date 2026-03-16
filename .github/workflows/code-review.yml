@@ -46,8 +46,8 @@ jobs:
           # Crear el prompt
           PROMPT_TEXT="Analiza este código PHP:\n\n$DIFF_CONTENT\n\nProporciona:\n1. Problemas principales\n2. Sugerencias\n3. Veredicto"
           
-          # Crear JSON usando jq
-          echo '{"model":"llama-3.1-70b-versatile","messages":[{"role":"system","content":"Eres un code reviewer PHP senior"},{"role":"user","content":"placeholder"}],"temperature":0.3,"max_tokens":1500}' > template.json
+          # Crear JSON usando jq - usando Kimi K2 Instruct
+          echo '{"model":"kimi-k2-instruct-0905","messages":[{"role":"system","content":"Eres un code reviewer PHP senior"},{"role":"user","content":"placeholder"}],"temperature":0.3,"max_tokens":1500}' > template.json
           
           # Reemplazar el placeholder
           jq --arg prompt "$PROMPT_TEXT" '.messages[1].content = $prompt' template.json > request.json
