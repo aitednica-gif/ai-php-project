@@ -1,0 +1,40 @@
+# Dependencies
+/vendor/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Testing
+.phpunit.cache
+coverage/
+.phpunit.result.cache
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+storage/
+
+# Cache
+bootstrap/cache/*.php
+!bootstrap/cache/.gitignore
+
+# Build
+node_modules/
+dist/
+build/
+
+# Misc
+*.bak
+*.tmp

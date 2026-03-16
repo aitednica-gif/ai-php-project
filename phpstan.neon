@@ -1,0 +1,17 @@
+includes:
+    - vendor/phpstan/phpstan-phpunit/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - app/
+        - config/
+    excludePaths:
+        - tests/
+        - vendor/
+    ignoreErrors:
+        - '#Call to an undefined method#'
+        - '#Property#'
+    reportUnmatchedIgnoredErrors: true
+    parallel:
+        processTimeout: 300

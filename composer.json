@@ -1,0 +1,50 @@
+{
+    "name": "big-school/ai-generated-project",
+    "description": "Proyecto PHP automatizado con IA y GitHub Actions",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "pestphp/pest": "^2.34",
+        "pestphp/pest-plugin-laravel": "^2.4",
+        "phpstan/phpstan": "^1.11",
+        "squizlabs/php_codesniffer": "^3.9",
+        "laravel/pint": "^1.15"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Config\\": "config/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "test:coverage": "vendor/bin/pest --coverage",
+        "lint": "vendor/bin/pint --test",
+        "lint:fix": "vendor/bin/pint",
+        "stan": "vendor/bin/phpstan analyse",
+        "cs": "vendor/bin/phpcs --standard=PSR12 app/",
+        "cs:fix": "vendor/bin/phpcbf --standard=PSR12 app/",
+        "ci": [
+            "@lint",
+            "@stan",
+            "@test"
+        ]
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

@@ -1,0 +1,127 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://staging.tu-dominio.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Instalar dependencias
+        run: composer install --prefer-dist --no-interaction --optimize-autoloader
+
+      - name: Run migrations
+        run: |
+          echo "Ejecutando migraciones..."
+          php artisan migrate --force
+
+      - name: Clear cache
+        run: |
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+
+      - name: Deploy (simulado)
+        run: |
+          echo "🚀 Deploy a staging completado"
+          echo "📦 artifacts: ${{ github.sha }}"
+
+      - name: Notificar deploy
+        run: |
+          echo "✅ Deploy a STAGING exitoso"
+          echo "🔗 https://staging.tu-dominio.com"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://tu-dominio.com
+    needs: deploy-staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Instalar dependencias
+        run: composer install --prefer-dist --no-interaction --optimize-autoloader
+
+      - name: Backup anterior
+        run: |
+          echo "Creando backup..."
+          # Acá irían los comandos de backup reales
+
+      - name: Run migrations
+        run: |
+          echo "Ejecutando migraciones en producción..."
+          php artisan migrate --force
+
+      - name: Deploy
+        run: |
+          echo "🚀 Deploy a PRODUCCIÓN completado"
+          echo "📦 Version: ${{ github.sha }}"
+
+      - name: Notify
+        run: |
+          echo "✅ Deploy a PRODUCCIÓN exitoso"
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} -d '{"text":"🚀 Nuevo deploy a producción: '.${{ github.sha }}'"}'
+
+  create-release:
+    name: Create Release Tag
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: deploy-production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: Release ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false

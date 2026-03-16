@@ -1,0 +1,56 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - dev
+      - staging
+
+jobs:
+  ai-review:
+    name: AI Code Review
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Obtener diff del PR
+        id: diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD -- '*.php' > pr_diff.txt
+          DIFF_LINES=$(wc -l < pr_diff.txt)
+          echo "diff_lines=$DIFF_LINES" >> $GITHUB_OUTPUT
+          
+          if [ "$DIFF_LINES" -lt 3 ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: AI Code Review
+        if: steps.diff.outputs.skip == 'false'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # Descargar script de review
+          curl -sL https://raw.githubusercontent.com/google/scripts/main/ai-review.sh > ai-review.sh
+          chmod +x ai-review.sh
+          
+          # Ejecutar review
+          ./ai-review.sh "$OPENAI_API_KEY" "$(cat pr_diff.txt)"
+
+      - name: Comentar resultado
+        if: steps.diff.outputs.skip == 'false'
+        run: |
+          echo "🤖 AI Code Review completado"
+          gh pr edit $PR_NUMBER --repo $REPO --add-label "ai-reviewed"
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
