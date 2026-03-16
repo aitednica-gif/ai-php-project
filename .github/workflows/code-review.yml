@@ -1,4 +1,4 @@
-name: AI Code Review
+name: AI Code Review with Groq
 
 on:
   pull_request:
@@ -27,30 +27,78 @@ jobs:
           git diff origin/${{ github.base_ref }}...HEAD -- '*.php' > pr_diff.txt
           DIFF_LINES=$(wc -l < pr_diff.txt)
           echo "diff_lines=$DIFF_LINES" >> $GITHUB_OUTPUT
-          
           if [ "$DIFF_LINES" -lt 3 ]; then
             echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: AI Code Review
+      - name: AI Review con Groq
         if: steps.diff.outputs.skip == 'false'
+        id: review
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          # Descargar script de review
-          curl -sL https://raw.githubusercontent.com/google/scripts/main/ai-review.sh > ai-review.sh
-          chmod +x ai-review.sh
-          
-          # Ejecutar review
-          ./ai-review.sh "$OPENAI_API_KEY" "$(cat pr_diff.txt)"
+          # Leer el diff
+          DIFF_CONTENT=$(cat pr_diff.txt)
+          echo "Diff length: $(echo "$DIFF_CONTENT" | wc -c) characters"
 
-      - name: Comentar resultado
+          # Crear el prompt
+          PROMPT_TEXT="Analyze this PHP code:\n\n$DIFF_CONTENT\n\nProvide:\n1. Main issues\n2. Suggestions\n3. Verdict"
+
+          # Crear JSON usando jq
+          jq -n --arg prompt "$PROMPT_TEXT" '{model: "moonshotai/kimi-k2-instruct-0905", messages: [{role: "system", content: "You are a senior PHP code reviewer. Provide detailed code reviews in English."}, {role: "user", content: $prompt}], temperature: 0.3, max_tokens: 1500}' > request.json
+
+          echo "Request JSON creado (primeras 500 chars):"
+          head -c 500 request.json
+          echo ""
+
+          # Llamar a Groq API
+          echo "Llamando a Groq API..."
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" https://api.groq.com/openai/v1/chat/completions \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @request.json)
+
+          # Separar body y status code
+          HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+
+          echo "HTTP Status: $HTTP_STATUS"
+          echo "Response body:"
+          echo "$HTTP_BODY"
+
+          # Guardar respuesta
+          echo "$HTTP_BODY" > response.json
+
+          # Extraer respuesta si el status es 200
+          if [ "$HTTP_STATUS" = "200" ]; then
+            ANALYSIS=$(jq -r '.choices[0].message.content // "Error: Respuesta vacía"' response.json)
+          else
+            ANALYSIS="Error HTTP $HTTP_STATUS: La API no respondió correctamente"
+          fi
+
+          echo "Análisis extraído: $ANALYSIS"
+
+          # Guardar en output
+          {
+            echo "analysis<<GHA_EOF"
+            echo "$ANALYSIS"
+            echo "GHA_EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Comentar en PR
         if: steps.diff.outputs.skip == 'false'
-        run: |
-          echo "🤖 AI Code Review completado"
-          gh pr edit $PR_NUMBER --repo $REPO --add-label "ai-reviewed"
+        uses: actions/github-script@v7
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
+          ANALYSIS: ${{ steps.review.outputs.analysis }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const analysis = process.env.ANALYSIS || "Error al obtener análisis";
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🤖 **AI Code Review (Groq/Llama 3)**\n\n' + analysis + '\n\n---\n*Generado automáticamente* 🚀'
+            });
