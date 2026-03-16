@@ -39,42 +39,41 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          # Leer el diff
-          DIFF_CONTENT=$(cat pr_diff.txt)
+          # Crear el prompt
+          echo "Analiza este código PHP y proporciona un review conciso:" > prompt.txt
+          echo "" >> prompt.txt
+          cat pr_diff.txt >> prompt.txt
+          echo "" >> prompt.txt
+          echo "Responde con:" >> prompt.txt
+          echo "1. Problemas encontrados (si hay)" >> prompt.txt
+          echo "2. Sugerencias de mejora" >> prompt.txt
+          echo "3. Veredicto: APROBADO o NECESITA_CAMBIOS" >> prompt.txt
           
-          # Crear JSON para la API
-          cat > request.json << 'EOF'
-          {
-            "model": "llama3-70b-8192",
-            "messages": [
-              {
-                "role": "system",
-                "content": "Eres un code reviewer PHP senior. Analiza código con rigor técnico."
-              },
-              {
-                "role": "user",
-                "content": "Analiza este código PHP:\n\n```php\n$DIFF_CONTENT\n```\n\nProporciona:\n1. CRÍTICAS: qué está mal\n2. PROBLEMAS: lista con severidad 🔴🟡🟢\n3. SUGERENCIAS\n4. VEREDICTO: ✅/⚠️/❌"
-              }
-            ],
-            "temperature": 0.3,
-            "max_tokens": 2000
-          }
-          EOF
+          PROMPT=$(cat prompt.txt)
           
-          # Reemplazar el diff en el JSON (escapando caracteres especiales)
-          sed -i "s|\$DIFF_CONTENT|$DIFF_CONTENT|g" request.json
-          
-          # Llamar a Groq
+          # Llamar a Groq API
           curl -s https://api.groq.com/openai/v1/chat/completions \
             -H "Authorization: Bearer $GROQ_API_KEY" \
             -H "Content-Type: application/json" \
-            -d @request.json > response.json
+            -d "{
+              \"model\": \"llama3-70b-8192\",
+              \"messages\": [
+                {\"role\": \"system\", \"content\": \"Eres un code reviewer PHP senior. Sé conciso y directo.\"},
+                {\"role\": \"user\", \"content\": \"$PROMPT\"}
+              ],
+              \"temperature\": 0.3,
+              \"max_tokens\": 1500
+            }" > response.json
           
           # Extraer respuesta
-          ANALYSIS=$(jq -r '.choices[0].message.content' response.json 2>/dev/null || echo "Error en análisis")
+          ANALYSIS=$(jq -r '.choices[0].message.content' response.json 2>/dev/null || echo "Error: No se pudo analizar el código")
           
-          # Guardar para el siguiente step
-          echo "analysis=$ANALYSIS" >> $GITHUB_OUTPUT
+          # Guardar en output
+          echo "analysis<<EOF" >> $GITHUB_OUTPUT
+          echo "$ANALYSIS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "✅ Análisis completado"
 
       - name: Comentar en PR
         if: steps.diff.outputs.skip == 'false'
