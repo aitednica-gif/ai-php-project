@@ -47,9 +47,7 @@ jobs:
           PROMPT_TEXT="Analiza este código PHP:\n\n$DIFF_CONTENT\n\nProporciona:\n1. Problemas principales\n2. Sugerencias\n3. Veredicto"
           
       # Crear JSON usando jq - usando Kimi K2 Instruct (con prefijo moonshotai/)
-      jq -n \
-        --arg prompt "$PROMPT_TEXT" \
-        '{model: "moonshotai/kimi-k2-instruct-0905", messages: [{role: "system", content: "Eres un code reviewer PHP senior"}, {role: "user", content: $prompt}], temperature: 0.3, max_tokens: 1500}' > request.json
+      jq -n --arg prompt "$PROMPT_TEXT" '{model: "moonshotai/kimi-k2-instruct-0905", messages: [{role: "system", content: "Eres un code reviewer PHP senior"}, {role: "user", content: $prompt}], temperature: 0.3, max_tokens: 1500}' > request.json
           
           echo "Request JSON creado (primeras 500 chars):"
           head -c 500 request.json
