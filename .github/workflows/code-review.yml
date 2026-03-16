@@ -41,42 +41,49 @@ jobs:
         run: |
           # Leer el diff
           DIFF_CONTENT=$(cat pr_diff.txt)
+          echo "Diff length: $(echo "$DIFF_CONTENT" | wc -c) characters"
           
-          # Guardar el diff en una variable de entorno separada para evitar problemas
-          echo "diff_length=$(echo "$DIFF_CONTENT" | wc -c)" >> $GITHUB_OUTPUT
-          
-          # Crear JSON con el prompt
-          # El prompt incluirá el diff directamente
+          # Crear el prompt
           PROMPT_TEXT="Analiza este código PHP:\n\n$DIFF_CONTENT\n\nProporciona:\n1. Problemas principales\n2. Sugerencias\n3. Veredicto"
           
           # Crear JSON usando jq
           echo '{"model":"llama3-70b-8192","messages":[{"role":"system","content":"Eres un code reviewer PHP senior"},{"role":"user","content":"placeholder"}],"temperature":0.3,"max_tokens":1500}' > template.json
           
-          # Reemplazar el placeholder con el prompt real
+          # Reemplazar el placeholder
           jq --arg prompt "$PROMPT_TEXT" '.messages[1].content = $prompt' template.json > request.json
           
-          # Debug
-          echo "Request JSON creado"
+          echo "Request JSON creado (primeras 500 chars):"
+          head -c 500 request.json
+          echo ""
           
-          # Llamar a Groq API
-          curl -s https://api.groq.com/openai/v1/chat/completions \
+          # Llamar a Groq API SIN silenciar errores
+          echo "Llamando a Groq API..."
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" https://api.groq.com/openai/v1/chat/completions \
             -H "Authorization: Bearer $GROQ_API_KEY" \
             -H "Content-Type: application/json" \
-            -d @request.json > response.json
+            -d @request.json)
           
-          # Extraer respuesta
-          if command -v jq &> /dev/null; then
-            ANALYSIS=$(jq -r '.choices[0].message.content // "Error: No hay respuesta"' response.json 2>/dev/null)
+          # Separar body y status code
+          HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n1)
+          
+          echo "HTTP Status: $HTTP_STATUS"
+          echo "Response body:"
+          echo "$HTTP_BODY"
+          
+          # Guardar respuesta
+          echo "$HTTP_BODY" > response.json
+          
+          # Extraer respuesta si el status es 200
+          if [ "$HTTP_STATUS" = "200" ]; then
+            ANALYSIS=$(jq -r '.choices[0].message.content // "Error: Respuesta vacía"' response.json)
           else
-            ANALYSIS="Error: jq no disponible"
+            ANALYSIS="Error HTTP $HTTP_STATUS: La API no respondió correctamente"
           fi
           
-          # Si el análisis está vacío, usar mensaje de error
-          if [ -z "$ANALYSIS" ] || [ "$ANALYSIS" = "null" ]; then
-            ANALYSIS="No se pudo obtener análisis del código"
-          fi
+          echo "Análisis extraído: $ANALYSIS"
           
-          # Guardar en output usando delimitador único
+          # Guardar en output
           {
             echo "analysis<<GHA_EOF"
             echo "$ANALYSIS"
