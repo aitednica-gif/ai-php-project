@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+/**
+ * Test controller for AI review demonstration
+ */
 class TestController
 {
     public function index()
